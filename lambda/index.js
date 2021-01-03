@@ -9,6 +9,17 @@ const i18n = require('i18next');
 //Gets the english strinsg that Alexa will say
 const languageStrings = require('./en');
 
+var persistenceAdapter = getPersistenceAdapter();
+
+
+function getPersistenceAdapter(tableName) {
+    // This function is an indirect way to detect if this is part of an Alexa-Hosted skill
+        const {S3PersistenceAdapter} = require('ask-sdk-s3-persistence-adapter');
+        return new S3PersistenceAdapter({
+            bucketName: process.env.S3_PERSISTENCE_BUCKET
+        });
+   } 
+
 /*This is the launch request handler for when the user first envokes the skill use the convocation name 'Sanchita game' */
 const LaunchRequestHandler = {
     canHandle(handlerInput) {
@@ -17,9 +28,39 @@ const LaunchRequestHandler = {
     handle(handlerInput) {
         //The instruction message provides the instructions for Fizz Buzz, the instruction is part of the language strings 
         const speakOutput = handlerInput.t('INSTRUCTION_MSG');
+        var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        //This sets whether the game has begun or not. This is to allow for the correct reprompt message to be given
+        sessionAttributes.status = false;
+        //This keeps track of the previous message so that it can be used in the repeat intent
+        sessionAttributes.prev = speakOutput;
+        handlerInput.attributesManager.setSessionAttributes(sessionAttributes);
         return handlerInput.responseBuilder
             .speak(speakOutput)
             .reprompt(speakOutput)
+            .getResponse();
+    }
+};
+
+/* FallbackIntent triggers when a customer says something that doesn’t map to any intents in your skill */
+const FallbackIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.FallbackIntent';
+    },
+    handle(handlerInput) {
+        var speechText;
+        if (handlerInput.attributesManager.getSessionAttributes().status) {
+            speechText = handlerInput.t('FALLBACK_GAME_MSG');
+        }
+        else {
+            speechText = handlerInput.t('FALLBACK_MSG');
+        }
+        var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        sessionAttributes.prev = speechText;
+        handlerInput.attributesManager.setSessionAttributes(sessionAttributes);
+        return handlerInput.responseBuilder
+            .speak(speechText)
+            .reprompt(speechText)
             .getResponse();
     }
 };
@@ -34,7 +75,9 @@ const PlayIntentHandler = {
         var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
         //Begin storing the current number in session Attributes
         sessionAttributes.number = 1;
-        handlerInput.attributesManager.setSessionAttributes(sessionAttributes)
+        sessionAttributes.status = true;
+        sessionAttributes.prev = handlerInput.t('PLAY_MSG');
+        handlerInput.attributesManager.setSessionAttributes(sessionAttributes);
         if (sessionAttributes.number) {
             return handlerInput.responseBuilder
                 .speak(handlerInput.t('PLAY_MSG'))
@@ -50,7 +93,7 @@ const AnswerIntentHandler = {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
             && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AnswerIntent';
     },
-    handle(handlerInput) {
+    async handle(handlerInput) {
         var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
         //Since we have two slots - numbers and fizz (fizz, buzz, or fizzbuzz), we get the values of both slots
         var number = Alexa.getSlotValue(handlerInput.requestEnvelope, 'number');
@@ -61,8 +104,9 @@ const AnswerIntentHandler = {
         //Verifies that the user's input is the same as the result from the function result
         if (word && word === answer|| number && number.toString() === answer) {
             //In that case, we increase the curr number by 1 and alexa provides the next answer
-            sessionAttributes.number += 1
-            answer = result(sessionAttributes.number).toString()
+            sessionAttributes.number += 1;
+            answer = result(sessionAttributes.number).toString();
+            sessionAttributes.prev = answer;
             handlerInput.attributesManager.setSessionAttributes(sessionAttributes);
             return handlerInput.responseBuilder
             .speak(answer)
@@ -72,24 +116,60 @@ const AnswerIntentHandler = {
         
         else
         {
+            let {attributesManager} = handlerInput;
+            let persistentAttributes = await attributesManager.getPersistentAttributes();
+            if (checkMax(persistentAttributes.high, sessionAttributes.number)) {
+                persistentAttributes.high = sessionAttributes.number;
+                 attributesManager.setPersistentAttributes(persistentAttributes);
+                await attributesManager.savePersistentAttributes();
+            }
+            
+            sessionAttributes.status = false;
+            
             //If the answer is incorrect, the session ends
             return handlerInput.responseBuilder
-                .speak(handlerInput.t('INCORRECT_MSG', {answer: answer}))
+                .speak(handlerInput.t('INCORRECT_MSG', {answer: answer, high: persistentAttributes.high}))
                 .getResponse();
         }
     }
         
 };
 
+
 /*This provides instructions if the user says Help */
+
+const RepeatIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.RepeatIntent';
+    },
+    handle(handlerInput) {
+        var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        const speakOutput = sessionAttributes.prev;
+        return handlerInput.responseBuilder
+            .speak(speakOutput)
+            .reprompt(speakOutput)
+            .getResponse();
+    }
+};
+
+
+
+
+/*This provides instructions if the user says Help */
+
 const HelpIntentHandler = {
     canHandle(handlerInput) {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
             && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.HelpIntent';
     },
     handle(handlerInput) {
-        const speakOutput = handlerInput.attributesManager.getRequestAttributes().t('INSTRUCTION_MSG');
-
+        const speakOutput = handlerInput.t('INSTRUCTION_MSG');
+        /*
+        var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        sessionAttributes.prev = speakOutput;
+        handlerInput.attributesManager.setSessionAttributes(sessionAttributes);
+        */
         return handlerInput.responseBuilder
             .speak(speakOutput)
             .reprompt(speakOutput)
@@ -105,30 +185,17 @@ const CancelAndStopIntentHandler = {
                 || Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.StopIntent');
     },
     handle(handlerInput) {
-        const speakOutput = handlerInput.attributesManager.getRequestAttributes().t('STOP_MSG');
-
+        const speakOutput = handlerInput.t('STOP_MSG');
+        var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        sessionAttributes.prev = speakOutput;
+        sessionAttributes.status = false;
+        handlerInput.attributesManager.setSessionAttributes(sessionAttributes);
         return handlerInput.responseBuilder
             .speak(speakOutput)
             .getResponse();
     }
 };
 
-
-/* FallbackIntent triggers when a customer says something that doesn’t map to any intents in your skill */
-const FallbackIntentHandler = {
-    canHandle(handlerInput) {
-        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
-            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.FallbackIntent';
-    },
-    handle(handlerInput) {
-        const speakOutput = handlerInput.attributesManager.getRequestAttributes().t('FALLBACK_MSG');
-
-        return handlerInput.responseBuilder
-            .speak(speakOutput)
-            .reprompt(speakOutput)
-            .getResponse();
-    }
-};
 /* *
  * SessionEndedRequest notifies that a session was ended. This handler will be triggered when a currently open 
  * session is closed for one of the following reasons: 1) The user says "exit" or "quit". 2) The user does not 
@@ -155,7 +222,10 @@ const IntentReflectorHandler = {
     },
     handle(handlerInput) {
         const intentName = Alexa.getIntentName(handlerInput.requestEnvelope);
-        const speakOutput = `You just triggered ${intentName}`;
+        const speakOutput = handlerInput.t('REFLECTOR_MSG', {intentName: intentName});
+        var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        sessionAttributes.prev = speakOutput;
+        handlerInput.attributesManager.setSessionAttributes(sessionAttributes);
 
         return handlerInput.responseBuilder
             .speak(speakOutput)
@@ -173,7 +243,10 @@ const ErrorHandler = {
         return true;
     },
     handle(handlerInput, error) {
-        const speakOutput = 'Sorry, I had trouble doing what you asked. Please try again.';
+        const speakOutput = handlerInput.t('ERROR_MSG');
+        var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        sessionAttributes.prev = speakOutput;
+        handlerInput.attributesManager.setSessionAttributes(sessionAttributes);
         console.log(`~~~~ Error handled: ${JSON.stringify(error)}`);
 
         return handlerInput.responseBuilder
@@ -187,23 +260,40 @@ const ErrorHandler = {
 function result(number) {
     if (number % 3  === 0 && number % 5 === 0)
     {
-        return "fizzbuzz"
+        return "fizzbuzz";
     }
     else if (number % 3 === 0)
     {
-        return "fizz"
+        return "fizz";
     }
     else if (number % 5 === 0)
     {
-        return "buzz"
+        return "buzz";
     }
     else
     {
-        return number
+        return number;
         
     }
 }
 
+function checkMax(num1, num2)
+{
+    if (!num1) {
+        return true;
+    }
+    else if (num1 === num2) {
+        return false;
+    }
+    else if (num2 > num1) {
+        return true;
+    }
+    
+    else {
+        return false;
+    }
+    
+}
 
 /*This localization request interceptor determines the language and uses the appropriate language file */
 const LocalisationRequestInterceptor = {
@@ -228,6 +318,7 @@ exports.handler = Alexa.SkillBuilders.custom()
         PlayIntentHandler,
         AnswerIntentHandler,
         HelpIntentHandler,
+        RepeatIntentHandler,
         CancelAndStopIntentHandler,
         FallbackIntentHandler,
         SessionEndedRequestHandler,
@@ -236,5 +327,6 @@ exports.handler = Alexa.SkillBuilders.custom()
         LocalisationRequestInterceptor)
     .addErrorHandlers(
         ErrorHandler)
+    .withPersistenceAdapter(persistenceAdapter)
     .withCustomUserAgent('sample/hello-world/v1.2')
     .lambda();
