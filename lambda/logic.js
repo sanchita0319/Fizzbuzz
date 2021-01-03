@@ -17,6 +17,7 @@ module.exports = {
             return number;
         }
     },
+    //This finds the max given two numbers; used to find the highest number reached
     checkMax(num1, num2) {
         if (!num1) {
             return true;
