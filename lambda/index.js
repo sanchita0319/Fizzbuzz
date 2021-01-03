@@ -1,16 +1,22 @@
 /* *
- * This sample demonstrates handling intents from an Alexa skill using the Alexa Skills Kit SDK (v2).
- * Please visit https://alexa.design/cookbook for additional examples on implementing slots, dialog management,
- * session persistence, api calls, and more.
+ * Started with the Amazon Hello World Boilerplate code
  * */
+ 
 const Alexa = require('ask-sdk-core');
+// i18n library dependency, we use it below in a localisation interceptor
+const i18n = require('i18next');
 
+//Gets the english strinsg that Alexa will say
+const languageStrings = require('./en');
+
+/*This is the launch request handler for when the user first envokes the skill use the convocation name 'Sanchita game' */
 const LaunchRequestHandler = {
     canHandle(handlerInput) {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'LaunchRequest';
     },
     handle(handlerInput) {
-        const speakOutput = 'Welcome to Fizz Buzz! We\'ll each take turns counting up from one. You must replace numbers divisible by 3 with the word "fizz" and you must replace numbers divisible by 5 with the word "buzz". If a number is divisible by both 3 and 5, you should say "fizz buzz." If you get one wrong, you lose. When you\'re ready, say Play and I will start counting first. To hear the instructions now or anytime during the game, say Help';
+        //The instruction message provides the instructions for Fizz Buzz, the instruction is part of the language strings 
+        const speakOutput = handlerInput.t('INSTRUCTION_MSG');
         return handlerInput.responseBuilder
             .speak(speakOutput)
             .reprompt(speakOutput)
@@ -18,6 +24,7 @@ const LaunchRequestHandler = {
     }
 };
 
+/*This is the handler for when a user says 'Play'; Alexa says 'one' and prompts the user for the response */
 const PlayIntentHandler = {
     canHandle(handlerInput) {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
@@ -25,17 +32,19 @@ const PlayIntentHandler = {
     },
     handle(handlerInput) {
         var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        //Begin storing the current number in session Attributes
         sessionAttributes.number = 1;
         handlerInput.attributesManager.setSessionAttributes(sessionAttributes)
         if (sessionAttributes.number) {
             return handlerInput.responseBuilder
-                .speak(sessionAttributes.number.toString())
-                .reprompt(sessionAttributes.number.toString())
+                .speak(handlerInput.t('PLAY_MSG'))
+                .reprompt(handlerInput.t('PLAY_MSG'))
                 .getResponse();
         }
     }
 };
 
+/*This is the main handler for the game functionality; it verifies that the user's input is the correct response and also provides the next response */
 const AnswerIntentHandler = {
     canHandle(handlerInput) {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
@@ -43,39 +52,43 @@ const AnswerIntentHandler = {
     },
     handle(handlerInput) {
         var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        //Since we have two slots - numbers and fizz (fizz, buzz, or fizzbuzz), we get the values of both slots
         var number = Alexa.getSlotValue(handlerInput.requestEnvelope, 'number');
         var word = Alexa.getSlotValue(handlerInput.requestEnvelope, 'word');
-        sessionAttributes.number += 1
-        var output;
-        if (word === result(sessionAttributes.number).toString() ||  number.toString() === sessionAttributes.number.toString()) {
+        sessionAttributes.number += 1;
+        //This variable stores the answer given by result; the result function is defined below
+        var answer = result(sessionAttributes.number).toString();
+        //Verifies that the user's input is the same as the result from the function result
+        if (word && word === answer|| number && number.toString() === answer) {
+            //In that case, we increase the curr number by 1 and alexa provides the next answer
             sessionAttributes.number += 1
+            answer = result(sessionAttributes.number).toString()
             handlerInput.attributesManager.setSessionAttributes(sessionAttributes);
-            output = result(sessionAttributes.number).toString();
             return handlerInput.responseBuilder
-            .speak(output)
-            .reprompt(output)
+            .speak(answer)
+            .reprompt(handlerInput.t('REPROMPT_MSG', {answer: answer}))
             .getResponse();
         }
         
         else
         {
+            //If the answer is incorrect, the session ends
             return handlerInput.responseBuilder
-                .speak('bye!')
-                .withShouldEndSession(true);
+                .speak(handlerInput.t('INCORRECT_MSG', {answer: answer}))
+                .getResponse();
         }
     }
         
 };
 
-
-
+/*This provides instructions if the user says Help */
 const HelpIntentHandler = {
     canHandle(handlerInput) {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
             && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.HelpIntent';
     },
     handle(handlerInput) {
-        const speakOutput = 'You can say hello to me! How can I help?';
+        const speakOutput = handlerInput.attributesManager.getRequestAttributes().t('INSTRUCTION_MSG');
 
         return handlerInput.responseBuilder
             .speak(speakOutput)
@@ -84,6 +97,7 @@ const HelpIntentHandler = {
     }
 };
 
+/* This ends the game */
 const CancelAndStopIntentHandler = {
     canHandle(handlerInput) {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
@@ -91,25 +105,23 @@ const CancelAndStopIntentHandler = {
                 || Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.StopIntent');
     },
     handle(handlerInput) {
-        const speakOutput = 'Goodbye!';
+        const speakOutput = handlerInput.attributesManager.getRequestAttributes().t('STOP_MSG');
 
         return handlerInput.responseBuilder
             .speak(speakOutput)
             .getResponse();
     }
 };
-/* *
- * FallbackIntent triggers when a customer says something that doesn’t map to any intents in your skill
- * It must also be defined in the language model (if the locale supports it)
- * This handler can be safely added but will be ingnored in locales that do not support it yet 
- * */
+
+
+/* FallbackIntent triggers when a customer says something that doesn’t map to any intents in your skill */
 const FallbackIntentHandler = {
     canHandle(handlerInput) {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
             && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.FallbackIntent';
     },
     handle(handlerInput) {
-        const speakOutput = 'Sorry, I don\'t know about that. Please try again.';
+        const speakOutput = handlerInput.attributesManager.getRequestAttributes().t('FALLBACK_MSG');
 
         return handlerInput.responseBuilder
             .speak(speakOutput)
@@ -171,6 +183,7 @@ const ErrorHandler = {
     }
 };
 
+/*This function determines the currect response based on the current number */
 function result(number) {
     if (number % 3  === 0 && number % 5 === 0)
     {
@@ -192,6 +205,18 @@ function result(number) {
 }
 
 
+/*This localization request interceptor determines the language and uses the appropriate language file */
+const LocalisationRequestInterceptor = {
+    process(handlerInput) {
+        i18n.init({
+            lng: Alexa.getLocale(handlerInput.requestEnvelope),
+            resources: languageStrings
+        }).then((t) => {
+            handlerInput.t = (...args) => t(...args);
+        });
+    }
+};
+
 /**
  * This handler acts as the entry point for your skill, routing all request and response
  * payloads to the handlers above. Make sure any new handlers or interceptors you've
@@ -207,6 +232,8 @@ exports.handler = Alexa.SkillBuilders.custom()
         FallbackIntentHandler,
         SessionEndedRequestHandler,
         IntentReflectorHandler)
+    .addRequestInterceptors(
+        LocalisationRequestInterceptor)
     .addErrorHandlers(
         ErrorHandler)
     .withCustomUserAgent('sample/hello-world/v1.2')
