@@ -4,7 +4,7 @@
 const Alexa = require('ask-sdk-core');
 
 //Contains handlers for common intents
-const globalHandlers = require('./globalHandlers.js')
+const globalHandlers = require('./handlers/globalHandlers.js')
 
 //Contains localisation receptor
 const interceptors = require('./interceptors.js');
@@ -15,7 +15,7 @@ const util = require('./util');
 //Contains functions used to make calculations for the correct value and to find the current maximum number
 const logic = require('./logic')
 
-/*This is the launch request handler for when the user first envokes the skill use the convocation name 'Sanchita game' */
+/*This is the launch request handler for when the user first envokes the skill use the convocation name 'Fizz Buzz New edition' */
 const LaunchRequestHandler = {
     canHandle(handlerInput) {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'LaunchRequest';
@@ -23,7 +23,7 @@ const LaunchRequestHandler = {
     handle(handlerInput) {
         //The instruction message provides the instructions for Fizz Buzz, the instruction is part of the language strings 
         const speakOutput = handlerInput.t('INSTRUCTION_MSG');
-        var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        let sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
         //This sets whether the game has begun or not. This is to allow for the correct reprompt message to be given
         sessionAttributes.status = false;
         //This keeps track of the previous message so that it can be used in the repeat intent
@@ -44,7 +44,7 @@ const PlayIntentHandler = {
             && Alexa.getIntentName(handlerInput.requestEnvelope) === 'PlayIntent';
     },
     handle(handlerInput) {
-        var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        let sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
         //Begin storing the current number in session Attributes
         sessionAttributes.number = 1;
         sessionAttributes.status = true;
@@ -66,13 +66,13 @@ const AnswerIntentHandler = {
             && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AnswerIntent';
     },
     async handle(handlerInput) {
-        var sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
+        let sessionAttributes = handlerInput.attributesManager.getSessionAttributes();
         //Since we have two slots - numbers and fizz (fizz, buzz, or fizzbuzz), we get the values of both slots
-        var number = Alexa.getSlotValue(handlerInput.requestEnvelope, 'number');
-        var word = Alexa.getSlotValue(handlerInput.requestEnvelope, 'word');
+        let number = Alexa.getSlotValue(handlerInput.requestEnvelope, 'number');
+        let word = Alexa.getSlotValue(handlerInput.requestEnvelope, 'word');
         sessionAttributes.number += 1;
         //This variable stores the answer given by result; the result function is defined below
-        var answer = logic.result(sessionAttributes.number).toString();
+        let answer = logic.result(sessionAttributes.number).toString();
         //Verifies that the user's input is the same as the result from the function result
         if (word && word === answer|| number && number.toString() === answer) {
             //In that case, we increase the curr number by 1 and alexa provides the next answer
@@ -90,7 +90,7 @@ const AnswerIntentHandler = {
         {
             let {attributesManager} = handlerInput;
             let persistentAttributes = await attributesManager.getPersistentAttributes();
-            if (logic.checkMax(persistentAttributes.high, sessionAttributes.number)) {
+            if (Math.max(persistentAttributes.high, sessionAttributes.number)) {
                 persistentAttributes.high = sessionAttributes.number;
                  attributesManager.setPersistentAttributes(persistentAttributes);
                 await attributesManager.savePersistentAttributes();

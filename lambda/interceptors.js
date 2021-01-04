@@ -1,7 +1,7 @@
 const Alexa = require('ask-sdk-core');
 // i18n dependency
 const i18n = require('i18next');
-const languageStrings = require('./en');
+const languageStrings = require('./strings/en');
 
 const LocalisationRequestInterceptor = {
     process(handlerInput) {

@@ -1,4 +1,5 @@
 module.exports = {
+    //This functions calculates the correct next response - fizz, buzz, or number
     result(number) {
         if (number % 3  === 0 && number % 5 === 0)
         {
@@ -17,19 +18,4 @@ module.exports = {
             return number;
         }
     },
-    //This finds the max given two numbers; used to find the highest number reached
-    checkMax(num1, num2) {
-        if (!num1) {
-            return true;
-        }
-        else if (num1 === num2) {
-            return false;
-        }
-        else if (num2 > num1) {
-            return true;
-        }
-        else {
-            return false;
-        }
-    }
 }
